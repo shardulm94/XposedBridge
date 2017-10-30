@@ -157,4 +157,30 @@ public abstract class XC_MethodHook extends XCallback {
 		}
 
 	}
+
+	/**
+	 * Wrapper class to store the module path which declared the hook along with the hook
+	 */
+	/** @hide */
+	final static class Wrapper implements Comparable<Wrapper>{
+		final String modulePath;
+		final XC_MethodHook hook;
+		public Wrapper(String modulePath, XC_MethodHook hook) {
+			this.modulePath = modulePath;
+			this.hook = hook;
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (o instanceof Wrapper)
+				return hook.equals(((Wrapper) o).hook);
+			else
+				return false;
+		}
+
+		@Override
+		public int compareTo(Wrapper other) {
+			return hook.compareTo(other.hook);
+		}
+	}
 }

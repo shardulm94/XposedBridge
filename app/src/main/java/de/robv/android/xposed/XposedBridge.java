@@ -1,6 +1,7 @@
 package de.robv.android.xposed;
 
 import android.annotation.SuppressLint;
+import android.app.AndroidAppHelper;
 import android.content.res.Resources;
 import android.util.Log;
 
@@ -61,9 +62,10 @@ public final class XposedBridge {
 	private static final Object[] EMPTY_ARRAY = new Object[0];
 
 	// built-in handlers
-	private static final Map<Member, CopyOnWriteSortedSet<XC_MethodHook>> sHookedMethodCallbacks = new HashMap<>();
+	private static final Map<Member, CopyOnWriteSortedSet<XC_MethodHook.Wrapper>> sHookedMethodCallbacks = new HashMap<>();
 	/*package*/ static final CopyOnWriteSortedSet<XC_LoadPackage> sLoadedPackageCallbacks = new CopyOnWriteSortedSet<>();
 	/*package*/ static final CopyOnWriteSortedSet<XC_InitPackageResources> sInitPackageResourcesCallbacks = new CopyOnWriteSortedSet<>();
+	/*package*/ static final Map<String, String> sLoadedModuleClasses = new HashMap<>();
 
 	private XposedBridge() {}
 
@@ -89,6 +91,7 @@ public final class XposedBridge {
 					XposedInit.initForZygote();
 				}
 
+				XposedInit.loadPermissions();
 				XposedInit.loadModules();
 			} else {
 				Log.e(TAG, "Not initializing Xposed because of previous errors");
@@ -178,6 +181,14 @@ public final class XposedBridge {
 	 * @see #hookAllConstructors
 	 */
 	public static XC_MethodHook.Unhook hookMethod(Member hookMethod, XC_MethodHook callback) {
+		StackTraceElement[] stes = Thread.currentThread().getStackTrace();
+		String modulePath = null;
+		for(int i = stes.length - 1; i >= 0; i--) {
+			if (sLoadedModuleClasses.containsKey(stes[i].getClassName())) {
+				modulePath = sLoadedModuleClasses.get(stes[i].getClassName());
+			}
+		}
+
 		if (!(hookMethod instanceof Method) && !(hookMethod instanceof Constructor<?>)) {
 			throw new IllegalArgumentException("Only methods and constructors can be hooked: " + hookMethod.toString());
 		} else if (hookMethod.getDeclaringClass().isInterface()) {
@@ -187,7 +198,7 @@ public final class XposedBridge {
 		}
 
 		boolean newMethod = false;
-		CopyOnWriteSortedSet<XC_MethodHook> callbacks;
+		CopyOnWriteSortedSet<XC_MethodHook.Wrapper> callbacks;
 		synchronized (sHookedMethodCallbacks) {
 			callbacks = sHookedMethodCallbacks.get(hookMethod);
 			if (callbacks == null) {
@@ -196,7 +207,7 @@ public final class XposedBridge {
 				newMethod = true;
 			}
 		}
-		callbacks.add(callback);
+		callbacks.add(new XC_MethodHook.Wrapper(modulePath, callback));
 
 		if (newMethod) {
 			Class<?> declaringClass = hookMethod.getDeclaringClass();
@@ -235,13 +246,13 @@ public final class XposedBridge {
 	 */
 	@Deprecated
 	public static void unhookMethod(Member hookMethod, XC_MethodHook callback) {
-		CopyOnWriteSortedSet<XC_MethodHook> callbacks;
+		CopyOnWriteSortedSet<XC_MethodHook.Wrapper> callbacks;
 		synchronized (sHookedMethodCallbacks) {
 			callbacks = sHookedMethodCallbacks.get(hookMethod);
 			if (callbacks == null)
 				return;
 		}
-		callbacks.remove(callback);
+		callbacks.remove(new XC_MethodHook.Wrapper(null, callback));
 	}
 
 	/**
@@ -314,7 +325,15 @@ public final class XposedBridge {
 		int beforeIdx = 0;
 		do {
 			try {
-				((XC_MethodHook) callbacksSnapshot[beforeIdx]).beforeHookedMethod(param);
+				XC_MethodHook.Wrapper hookWrapper = ((XC_MethodHook.Wrapper) callbacksSnapshot[beforeIdx]);
+				boolean bkpDisableHooks = disableHooks;
+				disableHooks = true;
+				if(PermissionManager.checkPermission(hookWrapper.modulePath , AndroidAppHelper.currentPackageName())) {
+					disableHooks = bkpDisableHooks;
+					hookWrapper.hook.beforeHookedMethod(param);
+				} else {
+					disableHooks = bkpDisableHooks;
+				}
 			} catch (Throwable t) {
 				XposedBridge.log(t);
 
@@ -348,7 +367,15 @@ public final class XposedBridge {
 			Throwable lastThrowable = param.getThrowable();
 
 			try {
-				((XC_MethodHook) callbacksSnapshot[afterIdx]).afterHookedMethod(param);
+				XC_MethodHook.Wrapper hookWrapper = ((XC_MethodHook.Wrapper) callbacksSnapshot[afterIdx]);
+				boolean bkpDisableHooks = disableHooks;
+				disableHooks = true;
+				if(PermissionManager.checkPermission(hookWrapper.modulePath , AndroidAppHelper.currentPackageName())) {
+					disableHooks = bkpDisableHooks;
+					hookWrapper.hook.afterHookedMethod(param);
+				} else {
+					disableHooks = bkpDisableHooks;
+				}
 			} catch (Throwable t) {
 				XposedBridge.log(t);
 
@@ -537,11 +564,11 @@ public final class XposedBridge {
 	}
 
 	private static class AdditionalHookInfo {
-		final CopyOnWriteSortedSet<XC_MethodHook> callbacks;
+		final CopyOnWriteSortedSet<XC_MethodHook.Wrapper> callbacks;
 		final Class<?>[] parameterTypes;
 		final Class<?> returnType;
 
-		private AdditionalHookInfo(CopyOnWriteSortedSet<XC_MethodHook> callbacks, Class<?>[] parameterTypes, Class<?> returnType) {
+		private AdditionalHookInfo(CopyOnWriteSortedSet<XC_MethodHook.Wrapper> callbacks, Class<?>[] parameterTypes, Class<?> returnType) {
 			this.callbacks = callbacks;
 			this.parameterTypes = parameterTypes;
 			this.returnType = returnType;

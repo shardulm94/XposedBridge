@@ -400,6 +400,23 @@ import static de.robv.android.xposed.XposedHelpers.setStaticObjectField;
 	}
 
 	/**
+	 * Try to load all module permissions defined in <code>BASE_DIR/conf/permissions.json</code>
+	 */
+	/*package*/
+	static void loadPermissions() throws IOException {
+		final String filename = BASE_DIR + "conf/permissions.json";
+		BaseService service = SELinuxHelper.getAppDataFileService();
+		if (!service.checkFileExists(filename)) {
+			Log.e(TAG, "Cannot load any module permissions because " + filename + " was not found");
+			return;
+		}
+
+		InputStream stream = service.getFileInputStream(filename);
+		PermissionManager.readPermissionsFromStream(stream);
+		stream.close();
+	}
+
+	/**
 	 * Try to load all modules defined in <code>BASE_DIR/conf/modules.list</code>
 	 */
 	/*package*/ static void loadModules() throws IOException {
@@ -500,6 +517,7 @@ import static de.robv.android.xposed.XposedHelpers.setStaticObjectField;
 						continue;
 					}
 
+					XposedBridge.sLoadedModuleClasses.put(moduleClassName, apk);
 					final Object moduleInstance = moduleClass.newInstance();
 					if (XposedBridge.isZygote) {
 						if (moduleInstance instanceof IXposedHookZygoteInit) {
