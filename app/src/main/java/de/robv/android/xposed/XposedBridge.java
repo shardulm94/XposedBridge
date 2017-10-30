@@ -181,6 +181,7 @@ public final class XposedBridge {
 	 * @see #hookAllConstructors
 	 */
 	public static XC_MethodHook.Unhook hookMethod(Member hookMethod, XC_MethodHook callback) {
+		// Check the stack trace to get the module class which called this method
 		StackTraceElement[] stes = Thread.currentThread().getStackTrace();
 		String modulePath = null;
 		for(int i = stes.length - 1; i >= 0; i--) {
@@ -325,6 +326,8 @@ public final class XposedBridge {
 		int beforeIdx = 0;
 		do {
 			try {
+				// check for permissions before calling the "before method" callback
+				// disable hooks temporarily while checking permissions
 				XC_MethodHook.Wrapper hookWrapper = ((XC_MethodHook.Wrapper) callbacksSnapshot[beforeIdx]);
 				boolean bkpDisableHooks = disableHooks;
 				disableHooks = true;
@@ -367,6 +370,8 @@ public final class XposedBridge {
 			Throwable lastThrowable = param.getThrowable();
 
 			try {
+				// check for permissions before calling the "after method" callback
+				// disable hooks temporarily while checking permissions
 				XC_MethodHook.Wrapper hookWrapper = ((XC_MethodHook.Wrapper) callbacksSnapshot[afterIdx]);
 				boolean bkpDisableHooks = disableHooks;
 				disableHooks = true;

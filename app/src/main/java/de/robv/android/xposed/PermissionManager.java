@@ -70,6 +70,14 @@ import java.util.concurrent.ConcurrentMap;
         return granted;
     }
 
+
+    // Helper methods to read the permissions.json file
+
+    private static class Module {
+        String name;
+        Set<String> packages;
+    }
+
     /*package*/
     static void readPermissionsFromStream(InputStream stream) throws IOException {
         JsonReader reader = new JsonReader(new InputStreamReader(stream));
@@ -79,11 +87,6 @@ import java.util.concurrent.ConcurrentMap;
             reader.close();
         }
         Log.i(TAG, "Loaded Permissions: " + permissionMap.toString());
-    }
-
-    private static class Module {
-        String name;
-        Set<String> packages;
     }
 
     private static void readModulesArray(JsonReader reader) throws IOException {
