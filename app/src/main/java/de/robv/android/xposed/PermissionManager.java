@@ -32,10 +32,6 @@ import java.util.concurrent.ConcurrentMap;
             return true;
         }
 
-        if (modulePath != null) {
-            return true;
-        }
-
         String moduleName = modulePathToName.get(modulePath);
         if (moduleName == null) {
             if (pm == null) {

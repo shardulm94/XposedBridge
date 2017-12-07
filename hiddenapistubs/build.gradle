@@ -9,4 +9,5 @@ android {
             variant.ignore = true
         }
     }
+    buildToolsVersion '25.0.0'
 }
