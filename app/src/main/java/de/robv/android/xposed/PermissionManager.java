@@ -2,6 +2,7 @@ package de.robv.android.xposed;
 
 import android.app.AndroidAppHelper;
 import android.app.Application;
+import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
@@ -75,13 +76,15 @@ import java.util.concurrent.ConcurrentMap;
     private static void sendNotification(String moduleName, String packageName, boolean granted) {
         Application app = AndroidAppHelper.currentApplication();
         if (app != null) {
-            Intent sendIntent = new Intent("de.robv.android.xposed.installer.PERMISSION_ACCESS");
-            sendIntent.putExtra("some", moduleName + " " + packageName + " " + granted);
+            Intent sendIntent = new Intent("de.robv.android.xposed.installer.action.PERMISSION_NOTIFICATION");
             sendIntent.putExtra("moduleName", moduleName);
             sendIntent.putExtra("packageName", packageName);
             sendIntent.putExtra("granted", granted);
-            sendIntent.setType("text/plain");
+            sendIntent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
+            sendIntent.setComponent(new ComponentName("de.robv.android.xposed.installer", "de.robv.android.xposed" +
+                    ".installer.receivers.PermissionsLogReceiver"));
             app.sendBroadcast(sendIntent);
+
             Log.i(TAG, "Permission broadcast send");
         }
     }
