@@ -13,9 +13,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -25,7 +23,7 @@ import java.util.concurrent.ConcurrentMap;
 
     private static PackageManager pm;
     private static Map<String, String> modulePathToName = new HashMap<>();
-    private static ConcurrentMap<String, Set<String>> permissionMap = new ConcurrentHashMap<>();
+    private static ConcurrentMap<String, Map<String, Boolean>> permissionMap = new ConcurrentHashMap<>();
 
     static boolean checkPermission(String modulePath, String packageName) {
         if (modulePath == null) {
@@ -62,27 +60,30 @@ import java.util.concurrent.ConcurrentMap;
 
         Log.i(TAG, "Checking permissions for " + moduleName + " to " + packageName);
         boolean granted = false;
+        boolean unknown = true;
         if (permissionMap.containsKey(moduleName)) {
-            Set<String> perms = permissionMap.get(moduleName);
-            if (perms.contains(packageName)) {
-                granted = true;
+            Map<String, Boolean> perms = permissionMap.get(moduleName);
+            if (perms.containsKey(packageName)) {
+                unknown = false;
+                granted = perms.get(packageName);
             }
         }
-        Log.i(TAG, "Permissions for " + moduleName + " to " + packageName + ": " + granted);
-        sendNotification(moduleName, packageName, granted);
+        String status = unknown ? "unknown" : (granted ? "allowed" : "denied");
+        Log.i(TAG, "Permissions for " + moduleName + " to " + packageName + ": " + status);
+        sendNotification(moduleName, packageName, status);
         return granted;
     }
 
-    private static void sendNotification(String moduleName, String packageName, boolean granted) {
+    private static void sendNotification(String moduleName, String packageName, String status) {
         Application app = AndroidAppHelper.currentApplication();
         if (app != null) {
             Intent sendIntent = new Intent("de.robv.android.xposed.installer.action.PERMISSION_NOTIFICATION");
             sendIntent.putExtra("moduleName", moduleName);
             sendIntent.putExtra("packageName", packageName);
-            sendIntent.putExtra("granted", granted);
+            sendIntent.putExtra("status", status);
             sendIntent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
             sendIntent.setComponent(new ComponentName("de.robv.android.xposed.installer", "de.robv.android.xposed" +
-                    ".installer.receivers.PermissionsLogReceiver"));
+                    ".installer.receivers.PermissionsReceiver"));
             app.sendBroadcast(sendIntent);
 
             Log.i(TAG, "Permission broadcast send");
@@ -94,7 +95,7 @@ import java.util.concurrent.ConcurrentMap;
 
     private static class Module {
         String name;
-        Set<String> packages;
+        Map<String, Boolean> packages;
     }
 
     /*package*/
@@ -126,7 +127,7 @@ import java.util.concurrent.ConcurrentMap;
             if (name.equals("name")) {
                 m.name = reader.nextString();
             } else if (name.equals("packages")) {
-                m.packages = readPackagesSet(reader);
+                m.packages = readPackagesMap(reader);
             } else {
                 reader.skipValue();
             }
@@ -135,13 +136,15 @@ import java.util.concurrent.ConcurrentMap;
         return m;
     }
 
-    private static Set<String> readPackagesSet(JsonReader reader) throws IOException {
-        Set<String> packages = new HashSet<String>();
-        reader.beginArray();
+    private static Map<String, Boolean> readPackagesMap(JsonReader reader) throws IOException {
+        Map<String, Boolean> packages = new HashMap<String, Boolean>();
+        reader.beginObject();
         while (reader.hasNext()) {
-            packages.add(reader.nextString());
+            String packageName = reader.nextName();
+            Boolean isAllowed = reader.nextBoolean();
+            packages.put(packageName, isAllowed);
         }
-        reader.endArray();
+        reader.endObject();
         return packages;
     }
 }
